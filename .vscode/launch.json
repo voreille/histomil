@@ -14,11 +14,13 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "--weights-path",
-                "/mnt/nas7/data/Personal/Darya/saved_models/superpixels_moco_org/superpixel_moco_org_93.pth",
+                "/home/valentin/workspaces/histomil/models/test/superpixel_moco_org_99.pth",
                 "--gpu-id",
                 "1",
                 "--num-workers",
                 "24",
+                "--max-batches",
+                "50",
             ]
         },
         {
