@@ -10,22 +10,35 @@ from histomil.training.utils import get_optimizer, get_scheduler, get_loss_funct
 from histomil.data.torch_datasets import HDF5WSIDataset  # Ensure you have this dataset class
 
 
+def collate_fn_ragged(batch):
+    wsi_ids, embeddings, labels = zip(*batch)
+    return list(wsi_ids), list(embeddings), torch.stack(labels)
+
+
 @click.command()
-@click.option("--hdf5-path", type=str, required=True, help="Path to the HDF5 file containing embeddings.")
+@click.option("--hdf5-path",
+              type=str,
+              required=True,
+              help="Path to the HDF5 file containing embeddings.")
 @click.option("--batch-size", default=8, help="Batch size for training.")
 @click.option("--num-epochs", default=50, help="Number of training epochs.")
-@click.option("--num-workers", default=4, help="Number of workers for DataLoader.")
+@click.option("--num-workers",
+              default=4,
+              help="Number of workers for DataLoader.")
 @click.option("--lr", default=1e-3, help="Learning rate for the optimizer.")
-@click.option("--optimizer", default="adam", help="Optimizer to use (adam, sgd, adamw).")
+@click.option("--optimizer",
+              default="Adam",
+              help="Optimizer to use (adam, sgd, adamw).")
 @click.option("--scheduler", default="cosine", help="Learning rate scheduler.")
-@click.option("--hidden-dim", default=128, help="Hidden dimension for the model.")
+@click.option("--hidden-dim",
+              default=128,
+              help="Hidden dimension for the model.")
 @click.option("--dropout", default=0.2, help="Dropout rate for the model.")
 @click.option("--log-every-n", default=10, help="Logging frequency.")
-@click.option("--gpus", default=1, help="Number of GPUs to use (0 for CPU).")
-def train_aggregator(
-    hdf5_path, batch_size, num_epochs, num_workers, lr, optimizer, scheduler,
-    hidden_dim, dropout, log_every_n, gpus
-):
+@click.option("--gpu-id", default=1, help="ID of the GPU to use")
+def train_aggregator(hdf5_path, batch_size, num_epochs, num_workers, lr,
+                     optimizer, scheduler, hidden_dim, dropout, log_every_n,
+                     gpu_id):
     """Train the Attention MIL Aggregator Model using PyTorch Lightning."""
 
     # Load dataset
@@ -34,14 +47,25 @@ def train_aggregator(
 
     embedding_dim = train_dataset.embedding_dim
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=collate_fn_ragged,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        collate_fn=collate_fn_ragged,
+    )
 
     # Initialize model
     model = AttentionAggregatorPL(
         input_dim=embedding_dim,  # Assuming your embeddings are 2048-dim
         hidden_dim=hidden_dim,
-        num_classes=2,  # Change if you have more classes
+        num_classes=3,  # Change if you have more classes
         dropout=dropout,
         optimizer=optimizer,
         optimizer_kwargs={"lr": lr},
@@ -52,10 +76,10 @@ def train_aggregator(
     # PyTorch Lightning Trainer
     trainer = pl.Trainer(
         max_epochs=num_epochs,
-        accelerator="gpu" if gpus > 0 and torch.cuda.is_available() else "cpu",
-        devices=gpus if torch.cuda.is_available() else 1,
+        accelerator="gpu",
+        devices=[gpu_id],
         log_every_n_steps=log_every_n,
-        precision=16 if torch.cuda.is_available() else 32,  # Mixed precision for speedup
+        precision="16-mixed",
     )
 
     # Train model

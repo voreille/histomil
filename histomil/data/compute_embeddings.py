@@ -62,7 +62,7 @@ def compute_embeddings(
     model,
     preprocess=None,
     batch_size=128,
-    num_workers=0,
+    num_workers=None,
     max_batches=None,
     save_every=100,
     temp_checkpoint=None,
@@ -82,19 +82,24 @@ def compute_embeddings(
         embeddings = []
 
     dataset = TileDataset(tile_paths, preprocess=preprocess)
+    num_workers = min(4,
+                      os.cpu_count() //
+                      2) if num_workers is None else num_workers
     dataloader = DataLoader(
         dataset,
         num_workers=num_workers,
         shuffle=False,
         batch_size=batch_size,
-        prefetch_factor=4,
+        prefetch_factor=4 if num_workers > 0 else None,
+        persistent_workers=num_workers > 0,  # Keep workers alive
         pin_memory=True,
     )
     model.eval()
     device = next(model.parameters()).device
 
-    with torch.autocast(device_type="cuda",
-                        dtype=torch.float16):  # Mixed precision for efficiency
+    print(f"starting processing tiles with num_workers={num_workers}")
+
+    with torch.autocast(device_type="cuda", dtype=torch.float16):
         with torch.no_grad():
             for batch_idx, (batch_images, batch_tile_paths) in enumerate(
                     tqdm(dataloader, desc="Processing Tiles", unit="batch")):
@@ -116,6 +121,9 @@ def compute_embeddings(
                     np.savez(temp_checkpoint,
                              embeddings=np.vstack(embeddings),
                              tile_paths=np.array(processed_tile_paths))
+                    print(
+                        f"Saving checkpoint at batch {batch_idx+1} to {temp_checkpoint}... - DONE"
+                    )
 
     embeddings = np.vstack(embeddings)
     processed_tile_paths = np.array(processed_tile_paths)
@@ -124,6 +132,7 @@ def compute_embeddings(
                  embeddings=embeddings,
                  tile_paths=processed_tile_paths)
 
+        print(f"Saved final checkpoint to {temp_checkpoint}...")
     return embeddings, processed_tile_paths
 
 
@@ -162,7 +171,8 @@ def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
 @click.option("--gpu-id", default=0, help="GPU ID to use for inference")
 @click.option("--batch-size", default=256, help="Batch size for inference")
 @click.option("--num-workers",
-              default=0,
+              default=None,
+              type=click.INT,
               help="Number of workers for DataLoader")
 @click.option("--max-batches",
               default=None,
@@ -263,7 +273,7 @@ def main(model_name,
             grp.attrs["label"] = label
 
     print(f"All embeddings stored successfully in {hdf5_path}!")
-    print("Total number of tiles:", total_number_tiles)
+    print(f"Total number of tiles: {total_number_tiles}")
 
     total_tiles = 0
     with h5py.File(hdf5_path, "r") as f:
@@ -275,9 +285,9 @@ def main(model_name,
                 # Assumes that each WSI group has an "embeddings" dataset
                 ds = split_group[wsi]["embeddings"]
                 total_tiles += ds.shape[0]
-    print("Total number of tiles (computed):", total_tiles)
-    print("Total number of tiles (stored as metadata):",
-          total_number_tiles_stored)
+    print(f"Total number of tiles (computed): {total_tiles}")
+    print(f"Total number of tiles (stored as metadata): "
+          f"{total_number_tiles_stored}")
 
     # # Remove temp file after success
     # if temp_checkpoint.exists():

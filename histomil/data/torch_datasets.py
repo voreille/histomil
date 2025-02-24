@@ -4,11 +4,12 @@ import torch.nn.functional as F
 import pyspng
 import h5py
 import numpy as np
+from PIL import Image
 
 
 class TileDataset(Dataset):
 
-    def __init__(self, tile_paths, augmentation=None, preprocess=None):
+    def __init__(self, tile_paths, preprocess=None):
         """
         Tile-level dataset that returns individual tile images from a list of paths.
 
@@ -19,21 +20,25 @@ class TileDataset(Dataset):
         """
         self.tile_paths = tile_paths
         self.preprocess = preprocess
-        self.augmentation = augmentation
 
     def __len__(self):
         return len(self.tile_paths)
 
+    def _load_image(self, path):
+        """Loads an image efficiently using OpenCV."""
+        # img = cv2.imread(path)  # OpenCV loads as BGR
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert to RGB
+        with open(path, "rb") as f:
+            img = pyspng.load(f.read())
+        img = Image.fromarray(img).convert("RGB")  # Convert to PIL
+        return img
+
     def __getitem__(self, idx):
         tile_path = self.tile_paths[idx]
-        with open(tile_path, 'rb') as f:
-            image = pyspng.load(f.read())
-
-        if self.augmentation:
-            image = self.augmentation(image=image)['image']
+        image = self._load_image(tile_path)
 
         if self.preprocess:
-            image = self.preprocess(image).type(torch.FloatTensor)
+            image = self.preprocess(image)
 
         return image, str(tile_path)
 
@@ -41,12 +46,17 @@ class TileDataset(Dataset):
 class HDF5WSIDataset(Dataset):
     """Dataset to load embeddings from an HDF5 file for MIL training."""
 
-    def __init__(self, hdf5_path, split="train"):
+    def __init__(self, hdf5_path, split="train", label_map=None):
         self.hdf5_path = hdf5_path
         self.split = split
         self.h5_file = h5py.File(hdf5_path, "r")
         self.wsi_ids = list(self.h5_file[self.split].keys())
         self.embedding_dim = self.h5_file.attrs["embedding_dim"]
+        self.label_map = label_map if label_map else {
+            "NORMAL": 0,
+            "LUAD": 1,
+            "LUSC": 2
+        }
 
     def __len__(self):
         return len(self.wsi_ids)
@@ -58,8 +68,10 @@ class HDF5WSIDataset(Dataset):
             self.h5_file[f"{self.split}/{wsi_id}/embeddings"][:],
             dtype=torch.float32)
         label = torch.tensor(
-            self.h5_file[f"{self.split}/{wsi_id}"].attrs["label"],
-            dtype=torch.long)
+            self.label_map[
+                self.h5_file[f"{self.split}/{wsi_id}"].attrs["label"]],
+            dtype=torch.long,
+        )
         return wsi_id, embeddings, label
 
     def close(self):
