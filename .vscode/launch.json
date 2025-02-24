@@ -21,6 +21,8 @@
                 "24",
                 "--max-batches",
                 "50",
+                "--save-every",
+                "10",
             ]
         },
         {
@@ -32,7 +34,7 @@
             "justMyCode": false,
             "envFile": "${workspaceFolder}/.env",
             "args": [
-                "--model",
+                "--model-name",
                 "bioptimus",
                 "--gpu-id",
                 "1",
@@ -42,8 +44,30 @@
                 "20",
                 "--batch-size",
                 "512",
+                "--save-every",
+                "10",
             ]
         },
+        {
+            "name": "Python: Debug compute_embeddings_simpler CLI",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/histomil/data/compute_embeddings_simpler.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/.env",
+            "args": [
+                "--weights-path",
+                "/home/valentin/workspaces/histomil/models/test/superpixel_moco_org_99.pth",
+                "--gpu-id",
+                "1",
+                "--num-workers",
+                "24",
+                "--max-batches",
+                "5000",
+            ]
+        },
+
         {
             "name": "Python: Debug MIL training",
             "type": "debugpy",

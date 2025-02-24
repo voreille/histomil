@@ -139,14 +139,6 @@ def compute_embeddings(
     return embeddings, processed_tile_paths
 
 
-def get_hdf5_path(model_name, weights_path, output_dir):
-    """Generate a single HDF5 file path based on weights filename."""
-    if model_name == "local":
-        weights_name = Path(weights_path).stem
-        return Path(output_dir) / f"{weights_name}.h5"
-    else:
-        return Path(output_dir) / f"{model_name}.h5"
-
 
 def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
     """Store embeddings in a single HDF5 file with train/test groups."""
@@ -168,8 +160,8 @@ def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
               type=click.Path(exists=True),
               default=None,
               help='Path to the local model weights (ignored for bioptimus)')
-@click.option("--output-dir",
-              default="data/processed/embeddings/",
+@click.option("--output-filepath",
+              default="data/processed/embeddings/embedding.h5",
               help="Output directory for embeddings")
 @click.option("--gpu-id", default=0, help="GPU ID to use for inference")
 @click.option("--batch-size", default=256, help="Batch size for inference")
@@ -181,13 +173,11 @@ def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
               default=None,
               type=int,
               help="Limit number of batches for debugging")
-def main(model_name,
-         weights_path,
-         output_dir,
-         gpu_id,
-         batch_size,
-         num_workers,
-         max_batches=None):
+@click.option("--save-every",
+              default=500,
+              help="Save checkpoint every n batches")
+def main(model_name, weights_path, output_filepath, gpu_id, batch_size,
+         num_workers, max_batches, save_every):
     """Precompute and store WSI embeddings in a single HDF5 file."""
 
     # Load metadata
@@ -205,8 +195,7 @@ def main(model_name,
 
     # tile_paths = [Path(p) for p in tile_paths]
 
-    output_dir = project_dir / output_dir
-    hdf5_path = get_hdf5_path(model_name, weights_path, output_dir)
+    hdf5_path = Path(output_filepath)
     hdf5_path.parent.mkdir(exist_ok=True)
 
     # Define temp checkpoint path
@@ -226,7 +215,7 @@ def main(model_name,
         batch_size=batch_size,
         num_workers=num_workers,
         max_batches=max_batches,
-        save_every=100,
+        save_every=save_every,
         temp_checkpoint=temp_checkpoint,
     )
 
