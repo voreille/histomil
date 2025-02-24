@@ -35,7 +35,7 @@ class TileDataset(Dataset):
         if self.preprocess:
             image = self.preprocess(image).type(torch.FloatTensor)
 
-        return image, tile_path.stem
+        return image, str(tile_path)
 
 
 class HDF5WSIDataset(Dataset):
@@ -46,6 +46,7 @@ class HDF5WSIDataset(Dataset):
         self.split = split
         self.h5_file = h5py.File(hdf5_path, "r")
         self.wsi_ids = list(self.h5_file[self.split].keys())
+        self.embedding_dim = self.h5_file.attrs["embedding_dim"]
 
     def __len__(self):
         return len(self.wsi_ids)

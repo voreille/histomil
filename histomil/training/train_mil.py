@@ -32,12 +32,14 @@ def train_aggregator(
     train_dataset = HDF5WSIDataset(hdf5_path, split="train")
     val_dataset = HDF5WSIDataset(hdf5_path, split="test")
 
+    embedding_dim = train_dataset.embedding_dim
+
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers)
 
     # Initialize model
     model = AttentionAggregatorPL(
-        input_dim=2048,  # Assuming your embeddings are 2048-dim
+        input_dim=embedding_dim,  # Assuming your embeddings are 2048-dim
         hidden_dim=hidden_dim,
         num_classes=2,  # Change if you have more classes
         dropout=dropout,
