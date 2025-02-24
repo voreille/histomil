@@ -24,6 +24,27 @@
             ]
         },
         {
+            "name": "Python: Debug histomil CLI for bioptimus",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/.env",
+            "args": [
+                "--model",
+                "bioptimus",
+                "--gpu-id",
+                "1",
+                "--num-workers",
+                "24",
+                "--max-batches",
+                "20",
+                "--batch-size",
+                "512",
+            ]
+        },
+        {
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",

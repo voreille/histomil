@@ -1,13 +1,21 @@
 from pathlib import Path
+import os
 
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from torchvision import transforms
 import torch.nn as nn
+import timm
+from huggingface_hub import login
+from dotenv import load_dotenv
 
-from histolung.evaluation.evaluators import LungHist700Evaluator
 from histolung.models.models_darya import MoCoV2Encoder
+
+load_dotenv()
+
+# Example usage
+API_KEY = os.getenv('API_KEY', 'default_value')
 
 
 def get_device(gpu_id=None):
@@ -23,7 +31,7 @@ def get_device(gpu_id=None):
     return device
 
 
-def load_model(checkpoint_path, device):
+def load_local_model(checkpoint_path, device):
     """Load the MoCoV2 model from a given checkpoint, handling missing keys like queue_ptr."""
     checkpoint_path = Path(checkpoint_path)
     if not checkpoint_path.exists():
@@ -42,12 +50,39 @@ def load_model(checkpoint_path, device):
     if unexpected_keys:
         print(f"Warning: Unexpected keys in checkpoint: {unexpected_keys}")
 
-    preprocess = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-    ])
     encoder = model.encoder_q
     encoder.fc = nn.Identity()
 
-    return encoder.to(device).eval(), preprocess
+    return encoder.to(device).eval()
+
+
+def load_model(model_name, weights_path, device):
+    """Load the model dynamically based on the model name."""
+
+    if model_name == "bioptimus":
+        login(token=os.getenv("HUGGING_FACE_TOKEN"))
+        model = timm.create_model("hf-hub:bioptimus/H-optimus-0",
+                                  pretrained=True,
+                                  init_values=1e-5,
+                                  dynamic_img_size=False)
+        preprocess = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.707223, 0.578729, 0.703617),
+                                 std=(0.211883, 0.230117, 0.177517)),
+        ])
+        embedding_dim = 1536
+
+    else:
+        # Load your custom model from local weights
+        model = load_local_model(weights_path,
+                                 device)  # Your existing function
+        preprocess = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])
+        embedding_dim = 2048
+
+    model.to(device)
+    model.eval()
+    return model, preprocess, embedding_dim

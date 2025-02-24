@@ -41,14 +41,16 @@ def load_cptac_metadata(cptac_path):
 
 
 def compute_embeddings(
-    tile_paths,
-    model,
-    preprocess=None,
-    batch_size=128,
-    num_workers=0,
-    max_batches=None,
+        tile_paths,
+        model,
+        preprocess=None,
+        batch_size=128,
+        num_workers=0,
+        max_batches=None,
+        save_every=100,
+        temp_checkpoint="temp_embeddings.npz", 
 ):
-    """Compute embeddings for a list of tile images."""
+    """Compute embeddings dynamically based on model type."""
     dataset = TileDataset(tile_paths, preprocess=preprocess)
     dataloader = DataLoader(
         dataset,
@@ -64,26 +66,40 @@ def compute_embeddings(
     embeddings = []
     wsi_ids = []
 
-    with torch.no_grad():
-        for batch_idx, (batch_images, batch_tile_ids) in enumerate(
-                tqdm(dataloader, desc="Processing Tiles", unit="batch")):
-            if max_batches and batch_idx >= max_batches:
-                break  # Stop after processing max_batches for debugging
+    with torch.autocast(device_type="cuda",
+                        dtype=torch.float16):  # Mixed precision for efficiency
+        with torch.no_grad():
+            for batch_idx, (batch_images, batch_tile_ids) in enumerate(
+                    tqdm(dataloader, desc="Processing Tiles", unit="batch")):
+                if max_batches and batch_idx >= max_batches:
+                    break  # Stop after processing max_batches for debugging
 
-            batch_images = batch_images.to(device, non_blocking=True)
-            embeddings.append(model(batch_images).detach().cpu().numpy())
+                batch_images = batch_images.to(device, non_blocking=True)
+                features = model(batch_images).detach().cpu().numpy()
+                embeddings.append(features)
 
-            # Extract WSI IDs from tile IDs
-            wsi_ids.extend(
-                [tile_id.split("__")[0] for tile_id in batch_tile_ids])
+                # Extract WSI IDs from tile IDs
+                wsi_ids.extend(
+                    [tile_id.split("__")[0] for tile_id in batch_tile_ids])
+                # Save checkpoint every `save_every` batches
+                if batch_idx % save_every == 0:
+                    print(
+                        f"Saving checkpoint at batch {batch_idx} to {temp_checkpoint}..."
+                    )
+                    np.savez(temp_checkpoint,
+                             embeddings=np.vstack(embeddings),
+                             wsi_ids=np.array(wsi_ids))
 
     return np.concatenate(embeddings, axis=0), np.array(wsi_ids)
 
 
-def get_hdf5_path(weights_path, output_dir):
+def get_hdf5_path(model_name, weights_path, output_dir):
     """Generate a single HDF5 file path based on weights filename."""
-    weights_name = Path(weights_path).stem
-    return Path(output_dir) / f"{weights_name}.h5"
+    if model_name == "local":
+        weights_name = Path(weights_path).stem
+        return Path(output_dir) / f"{weights_name}.h5"
+    else:
+        return Path(output_dir) / f"{model_name}.h5"
 
 
 def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
@@ -97,20 +113,29 @@ def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
 
 
 @click.command()
+@click.option(
+    "--model",
+    type=str,
+    default="local",
+    help="Model type: 'local' for your model, 'bioptimus' for H-optimus-0")
 @click.option('--weights-path',
               type=click.Path(exists=True),
-              help='Path to the model weights')
+              default=None,
+              help='Path to the local model weights (ignored for bioptimus)')
 @click.option("--output",
               default="data/processed/embeddings/",
               help="Output directory for embeddings")
 @click.option("--gpu-id", default=0, help="GPU ID to use for inference")
-@click.option("--batch-size", default=256, help="")
-@click.option("--num-workers", default=0, help="")
+@click.option("--batch-size", default=256, help="Batch size for inference")
+@click.option("--num-workers",
+              default=0,
+              help="Number of workers for DataLoader")
 @click.option("--max-batches",
               default=None,
               type=int,
               help="Limit number of batches for debugging")
 def main(
+    model,
     weights_path,
     output,
     gpu_id,
@@ -134,20 +159,25 @@ def main(
     tile_paths = [Path(p) for p in tile_paths]
 
     output = project_dir / output
-    hdf5_path = get_hdf5_path(weights_path, output)
+    hdf5_path = get_hdf5_path(model, weights_path,
+                              output)  # Use model name as identifier
     hdf5_path.parent.mkdir(exist_ok=True)
 
-    # Load model
+    # Load Model
     device = get_device(gpu_id)
-    model, preprocess = load_model(weights_path, device)
+    model, preprocess, embedding_dim = load_model(model, weights_path, device)
 
     # Compute embeddings
-    embeddings, wsi_ids = compute_embeddings(tile_paths,
-                                             model,
-                                             preprocess=preprocess,
-                                             batch_size=batch_size,
-                                             num_workers=num_workers,
-                                             max_batches=max_batches)
+    embeddings, wsi_ids = compute_embeddings(
+        tile_paths,
+        model,
+        preprocess=preprocess,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        max_batches=max_batches,
+        save_every=100,
+        temp_checkpoint=project_dir / f"data/temp/{hdf5_path.stem}.npz",
+    )
 
     print("Grouping embeddings by WSI...")
 
@@ -180,7 +210,7 @@ def main(
                                compression="gzip")
             grp.attrs["label"] = label
 
-    print("All embeddings stored successfully!")
+    print(f"All embeddings stored successfully in {hdf5_path}!")
 
 
 if __name__ == "__main__":
