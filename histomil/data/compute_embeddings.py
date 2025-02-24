@@ -3,6 +3,7 @@ import datetime
 from pathlib import Path
 import json
 from collections import defaultdict
+from time import perf_counter
 
 import h5py
 import click
@@ -115,6 +116,7 @@ def compute_embeddings(
 
                 #  Save checkpoint every `save_every` batches
                 if (batch_idx + 1) % save_every == 0 and temp_checkpoint:
+                    time_before_saving = perf_counter()
                     print(
                         f"Saving checkpoint at batch {batch_idx+1} to {temp_checkpoint}..."
                     )
@@ -122,7 +124,8 @@ def compute_embeddings(
                              embeddings=np.vstack(embeddings),
                              tile_paths=np.array(processed_tile_paths))
                     print(
-                        f"Saving checkpoint at batch {batch_idx+1} to {temp_checkpoint}... - DONE"
+                        f"Saving checkpoint at batch {batch_idx+1} to "
+                        f"{temp_checkpoint}... - DONE in {time_before_saving - perf_counter()}"
                     )
 
     embeddings = np.vstack(embeddings)
