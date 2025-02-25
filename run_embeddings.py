@@ -30,8 +30,7 @@ for weights, exp_name in zip(checkpoint_paths, experiment_names):
                 "--weights-path",
                 str(weights), "--output-filepath",
                 f"data/processed/embeddings/{exp_name}.h5", "--num-workers",
-                "32", "--gpu-id", "1", "--batch-size", "512", "--max-batches",
-                "10"
+                "32", "--gpu-id", "1", "--batch-size", "512"
             ],
             check=True,
         )

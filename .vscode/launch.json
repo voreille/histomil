@@ -49,6 +49,32 @@
             ]
         },
         {
+            "name": "Python: Debug compute_embeddings CLI for UNI2",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/histomil/data/compute_embeddings.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/.env",
+            "args": [
+                "--model-name",
+                "UNI2",
+                "--gpu-id",
+                "1",
+                "--num-workers",
+                "24",
+                "--max-batches",
+                "20",
+                "--batch-size",
+                "512",
+                "--save-every",
+                "10",
+                "--output-filepath",
+                "data/processed/embeddings/UNI2_embeddings.h5",
+            ]
+        },
+ 
+        {
             "name": "Python: Debug compute_embeddings_simpler CLI",
             "type": "debugpy",
             "request": "launch",
@@ -78,13 +104,13 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "--hdf5-path",
-                "/home/valentin/workspaces/histomil/data/processed/embeddings/superpixel_moco_org_99_debug.h5",
+                "/home/valentin/workspaces/histomil/data/processed/embeddings/superpixels_resnet50__alpha_0.5__ablation.h5",
                 "--gpu-id",
                 "1",
                 "--num-workers",
-                "0",
+                "32",
                 "--batch-size",
-                "512",
+                "128",
             ]
         },
  

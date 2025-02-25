@@ -4,7 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from torchmetrics.classification import Accuracy
 
-from histolung.mil.utils import get_optimizer, get_scheduler, get_loss_function
+from histomil.training.utils import get_optimizer, get_scheduler, get_loss_function
 
 class AttentionAggregatorPL(pl.LightningModule):
 
@@ -47,7 +47,7 @@ class AttentionAggregatorPL(pl.LightningModule):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Tanh(),
             nn.Linear(hidden_dim, num_classes),
-            nn.Softmax(dim=1),  # FIXED: Apply softmax across patches, not classes
+            nn.Softmax(dim=0),  # FIXED: Apply softmax across patches, not classes
         )
         self.fc = nn.Linear(hidden_dim, num_classes)
 

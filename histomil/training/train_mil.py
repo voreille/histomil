@@ -20,8 +20,8 @@ def collate_fn_ragged(batch):
               type=str,
               required=True,
               help="Path to the HDF5 file containing embeddings.")
-@click.option("--batch-size", default=8, help="Batch size for training.")
-@click.option("--num-epochs", default=50, help="Number of training epochs.")
+@click.option("--batch-size", default=128, help="Batch size for training.")
+@click.option("--num-epochs", default=100, help="Number of training epochs.")
 @click.option("--num-workers",
               default=4,
               help="Number of workers for DataLoader.")
@@ -80,6 +80,7 @@ def train_aggregator(hdf5_path, batch_size, num_epochs, num_workers, lr,
         devices=[gpu_id],
         log_every_n_steps=log_every_n,
         precision="16-mixed",
+        check_val_every_n_epoch=20,
     )
 
     # Train model

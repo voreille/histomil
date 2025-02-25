@@ -79,6 +79,7 @@ def get_scheduler(optimizer, name, **kwargs):
     schedulers_dict = {
         "StepLR": torch.optim.lr_scheduler.StepLR,
         "CosineAnnealingLR": torch.optim.lr_scheduler.CosineAnnealingLR,
+        "cosine": torch.optim.lr_scheduler.CosineAnnealingLR,
         "ReduceLROnPlateau": torch.optim.lr_scheduler.ReduceLROnPlateau,
     }
 

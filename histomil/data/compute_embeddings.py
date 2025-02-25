@@ -58,6 +58,44 @@ def store_metadata(hdf5_path, model_name, weights_path, embedding_dim,
         hdf5_file.attrs["command"] = " ".join(os.sys.argv)
 
 
+def save_checkpoint_hdf5(temp_checkpoint, embeddings, tile_paths):
+    """Save checkpoint incrementally using HDF5."""
+    with h5py.File(temp_checkpoint, "a") as hdf5_file:
+        if "embeddings" in hdf5_file:
+            del hdf5_file["embeddings"]
+        if "tile_paths" in hdf5_file:
+            del hdf5_file["tile_paths"]
+
+        hdf5_file.create_dataset(
+            "embeddings",
+            data=np.array(embeddings),
+            compression="gzip",
+            chunks=True  # Enables faster incremental writes
+        )
+
+        # Store tile paths efficiently as UTF-8 strings
+        str_dt = h5py.string_dtype(encoding='utf-8')
+        hdf5_file.create_dataset("tile_paths",
+                                 data=np.array(tile_paths, dtype=object),
+                                 dtype=str_dt,
+                                 compression="gzip")
+
+        hdf5_file.attrs["last_saved_batch"] = len(tile_paths)
+
+
+def load_checkpoint_hdf5(temp_checkpoint):
+    """Load checkpoint from HDF5 file."""
+    if not temp_checkpoint.exists():
+        print(f"No checkpoint found at {temp_checkpoint}")
+        return [], []
+
+    with h5py.File(temp_checkpoint, "r") as hdf5_file:
+        embeddings = hdf5_file["embeddings"][:]
+        tile_paths = list(hdf5_file["tile_paths"][:])
+
+    return list(embeddings), list(tile_paths)
+
+
 def compute_embeddings(
     tile_paths,
     model,
@@ -67,16 +105,15 @@ def compute_embeddings(
     max_batches=None,
     save_every=100,
     temp_checkpoint=None,
+    autocast_dtype=torch.float16,
 ):
     """Compute embeddings dynamically based on model type and save temp checkpoints."""
 
     #  Try to load existing checkpoint
     if temp_checkpoint and os.path.exists(temp_checkpoint):
         print(f"Resuming from {temp_checkpoint}...")
-        checkpoint = np.load(temp_checkpoint, allow_pickle=True)
-        processed_tile_paths = list(checkpoint["tile_paths"])
-        embeddings = list(checkpoint["embeddings"])
-
+        embeddings, processed_tile_paths = load_checkpoint_hdf5(
+            temp_checkpoint)
         tile_paths = list(set(tile_paths) - set(processed_tile_paths))
     else:
         processed_tile_paths = []
@@ -100,8 +137,8 @@ def compute_embeddings(
 
     print(f"starting processing tiles with num_workers={num_workers}")
 
-    with torch.autocast(device_type="cuda", dtype=torch.float16):
-        with torch.no_grad():
+    with torch.autocast(device_type="cuda", dtype=autocast_dtype):
+        with torch.inference_mode():
             for batch_idx, (batch_images, batch_tile_paths) in enumerate(
                     tqdm(dataloader, desc="Processing Tiles", unit="batch")):
 
@@ -120,24 +157,22 @@ def compute_embeddings(
                     print(
                         f"Saving checkpoint at batch {batch_idx+1} to {temp_checkpoint}..."
                     )
-                    np.savez(temp_checkpoint,
-                             embeddings=np.vstack(embeddings),
-                             tile_paths=np.array(processed_tile_paths))
+                    save_checkpoint_hdf5(
+                        temp_checkpoint,
+                        embeddings,
+                        processed_tile_paths,
+                    )
                     print(
                         f"Saving checkpoint at batch {batch_idx+1} to "
-                        f"{temp_checkpoint}... - DONE in {time_before_saving - perf_counter()}"
+                        f"{temp_checkpoint}... - DONE in {perf_counter() - time_before_saving}"
                     )
 
     embeddings = np.vstack(embeddings)
     processed_tile_paths = np.array(processed_tile_paths)
     if temp_checkpoint:
-        np.savez(temp_checkpoint,
-                 embeddings=embeddings,
-                 tile_paths=processed_tile_paths)
-
+        save_checkpoint_hdf5(temp_checkpoint, embeddings, processed_tile_paths)
         print(f"Saved final checkpoint to {temp_checkpoint}...")
     return embeddings, processed_tile_paths
-
 
 
 def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
@@ -179,7 +214,12 @@ def store_embeddings(wsi_id, embeddings, label, hdf5_path, split):
 def main(model_name, weights_path, output_filepath, gpu_id, batch_size,
          num_workers, max_batches, save_every):
     """Precompute and store WSI embeddings in a single HDF5 file."""
-
+    autocast_dtype_dict = {
+        "local": torch.float16,
+        "bioptimus": torch.float16,
+        "UNI2": torch.bfloat16,
+    }
+    autocast_dtype = autocast_dtype_dict[model_name]
     # Load metadata
     cptac_test_df = pd.read_csv(os.getenv("CPTAC_TEST_SPLIT_CSV"))
     wsi_ids_test = set(cptac_test_df["Slide_ID"].to_list())
@@ -199,7 +239,7 @@ def main(model_name, weights_path, output_filepath, gpu_id, batch_size,
     hdf5_path.parent.mkdir(exist_ok=True)
 
     # Define temp checkpoint path
-    temp_checkpoint = project_dir / f"data/temp/{hdf5_path.stem}.npz"
+    temp_checkpoint = project_dir / f"data/temp/{hdf5_path.stem}.h5"
     temp_checkpoint.parent.mkdir(parents=True, exist_ok=True)
 
     # Load Model
@@ -217,6 +257,7 @@ def main(model_name, weights_path, output_filepath, gpu_id, batch_size,
         max_batches=max_batches,
         save_every=save_every,
         temp_checkpoint=temp_checkpoint,
+        autocast_dtype=autocast_dtype,
     )
 
     # Store metadata
@@ -280,10 +321,6 @@ def main(model_name, weights_path, output_filepath, gpu_id, batch_size,
     print(f"Total number of tiles (computed): {total_tiles}")
     print(f"Total number of tiles (stored as metadata): "
           f"{total_number_tiles_stored}")
-
-    # # Remove temp file after success
-    # if temp_checkpoint.exists():
-    #     temp_checkpoint.unlink()
 
 
 if __name__ == "__main__":
