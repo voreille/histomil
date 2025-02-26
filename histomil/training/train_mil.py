@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import click
 import torch
@@ -9,6 +10,7 @@ from histomil.models.mil_models import AttentionAggregatorPL
 from histomil.training.utils import get_optimizer, get_scheduler, get_loss_function
 from histomil.data.torch_datasets import HDF5WSIDataset  # Ensure you have this dataset class
 
+project_dir = Path(__file__).parents[2].resolve()
 
 def collate_fn_ragged(batch):
     wsi_ids, embeddings, labels = zip(*batch)
@@ -63,10 +65,11 @@ def train_aggregator(hdf5_path, batch_size, num_epochs, num_workers, lr,
 
     # Initialize model
     model = AttentionAggregatorPL(
-        input_dim=embedding_dim,  # Assuming your embeddings are 2048-dim
+        input_dim=embedding_dim,
         hidden_dim=hidden_dim,
-        num_classes=3,  # Change if you have more classes
+        num_classes=3,
         dropout=dropout,
+        loss="CrossEntropyLoss",
         optimizer=optimizer,
         optimizer_kwargs={"lr": lr},
         scheduler=scheduler,
@@ -80,11 +83,13 @@ def train_aggregator(hdf5_path, batch_size, num_epochs, num_workers, lr,
         devices=[gpu_id],
         log_every_n_steps=log_every_n,
         precision="16-mixed",
-        check_val_every_n_epoch=20,
+        check_val_every_n_epoch=1,
     )
 
     # Train model
     trainer.fit(model, train_loader, val_loader)
+    trainer.save_checkpoint(project_dir / "models/test_checkpoint.ckpt")
+
 
     # Close datasets
     train_dataset.close()

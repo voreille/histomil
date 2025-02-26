@@ -104,9 +104,9 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "--hdf5-path",
-                "/home/valentin/workspaces/histomil/data/processed/embeddings/superpixels_resnet50__alpha_0.5__ablation.h5",
+                "/home/valentin/workspaces/histomil/data/processed/embeddings/superpixel_org.h5",
                 "--gpu-id",
-                "1",
+                "0",
                 "--num-workers",
                 "32",
                 "--batch-size",

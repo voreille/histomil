@@ -1,8 +1,9 @@
 import logging
 
 import torch
-from torch.nn import BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 from torch.optim import Adam, SGD, AdamW, RMSprop
+from torchmetrics.classification import MulticlassAccuracy, MultilabelAccuracy
 
 from histomil.training.loss import FocalBCEWithLogitsLoss
 
@@ -10,7 +11,8 @@ from histomil.training.loss import FocalBCEWithLogitsLoss
 def get_loss_function(loss_name, **kwargs):
     loss_dict = {
         "BCEWithLogitsLoss": BCEWithLogitsLoss,
-        "FocalBinaryCrossEntropy": FocalBCEWithLogitsLoss,
+        "FocalBinaryCrossEntropyLoss": FocalBCEWithLogitsLoss,
+        "CrossEntropyLoss": CrossEntropyLoss,
     }
 
     loss_class = loss_dict.get(loss_name)
@@ -32,6 +34,30 @@ def get_loss_function(loss_name, **kwargs):
     #     return loss_class(**kwargs)
     # return loss_class()
     return loss_class(**kwargs)
+
+
+def get_metric(
+    num_classes,
+    threshold=0.5,
+    task="multilabel",
+    average="macro",
+    multidim_average="global",
+    top_k=1,
+):
+    if task == "multilabel":
+        return MultilabelAccuracy(
+            num_labels=num_classes,
+            threshold=threshold,
+            average=average,
+            multidim_average=multidim_average,
+        )
+
+    return MulticlassAccuracy(
+        num_classes=num_classes,
+        average=average,
+        multidim_average=multidim_average,
+        top_k=top_k,
+    )
 
 
 def get_optimizer(parameters, optimizer_name, **kwargs):
