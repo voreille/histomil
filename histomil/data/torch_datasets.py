@@ -7,6 +7,11 @@ import numpy as np
 from PIL import Image
 
 
+def collate_fn_ragged(batch):
+    wsi_ids, embeddings, labels = zip(*batch)
+    return list(wsi_ids), list(embeddings), torch.stack(labels)
+
+
 class TileDataset(Dataset):
 
     def __init__(self, tile_paths, preprocess=None):

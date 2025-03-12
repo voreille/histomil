@@ -6,7 +6,8 @@ import time
 
 # Define list of model weight paths
 
-model_names = ["UNI2", "bioptimus"]
+# model_names = ["UNI2", "bioptimus"]
+model_names = ["bioptimus"]
 print(f"computing the embeddings for baselines: {model_names}")
 
 for model_name in model_names:

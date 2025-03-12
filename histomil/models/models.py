@@ -16,9 +16,6 @@ from histolung.models.models_darya import MoCoV2Encoder
 
 load_dotenv()
 
-# Example usage
-API_KEY = os.getenv('API_KEY', 'default_value')
-
 
 def get_device(gpu_id=None):
     """Select the appropriate device for computation."""

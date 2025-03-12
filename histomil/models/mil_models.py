@@ -2,6 +2,7 @@ import torch
 import pytorch_lightning as pl
 from torch import nn
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from histomil.training.utils import get_optimizer, get_scheduler, get_loss_function, get_metric
 
@@ -77,6 +78,7 @@ class AttentionAggregatorPL(pl.LightningModule):
             num_classes=num_classes,
             average='macro',
         )
+        self.save_hyperparameters()
 
     def forward(self, x):
         """
@@ -106,6 +108,28 @@ class AttentionAggregatorPL(pl.LightningModule):
         prediction = self.classifier(aggregated_features)  # (num_classe,)
 
         return prediction.squeeze(), attention_scores
+
+    def predict_step(self, batch, batch_idx):
+        wsi_ids, embeddings, labels = batch
+        logits = []
+
+        for embedding in embeddings:
+            output, _ = self(embedding)
+            logits.append(output)
+
+        logits = torch.stack(logits)
+
+        preds = logits.argmax(dim=-1)
+
+        probs = torch.sigmoid(logits)  # Shape: (batch_size, 3)
+
+        return {
+            "logits": logits,
+            "probs": probs,
+            "preds": preds,
+            "labels": labels,
+            "wsi_ids": wsi_ids,
+        }
 
     def step(self, batch):
         _, embeddings, labels = batch
@@ -141,7 +165,7 @@ class AttentionAggregatorPL(pl.LightningModule):
                  batch_size=batch_size,
                  prog_bar=True)
         self.log("train_acc",
-                 self.train_accuracy,
+                 self.train_accuracy.compute(),
                  on_step=True,
                  on_epoch=True,
                  batch_size=batch_size,
@@ -149,48 +173,79 @@ class AttentionAggregatorPL(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, preds, labels, batch_size = self.step(batch)
+        val_loss, preds, labels, batch_size = self.step(batch)
         self.val_accuracy(preds, labels)
+        accuracy = self.val_accuracy.compute()
 
         # Log metrics
         self.log("val_loss",
-                 loss,
+                 val_loss,
                  on_epoch=True,
                  batch_size=batch_size,
                  prog_bar=True)
         self.log("val_acc",
-                 self.val_accuracy,
+                 accuracy,
                  on_epoch=True,
                  batch_size=batch_size,
                  prog_bar=True)
 
-        return loss  # FIXED: Now returning loss for proper logging
-
     def test_step(self, batch, batch_idx):
         loss, preds, labels, batch_size = self.step(batch)
         # Log test metrics
-        self.log("test_loss", loss)
+        self.log("test_loss", loss, batch_size=batch_size)
         self.log(
             "test_acc",
             get_metric(
                 task=self.task,
                 num_classes=self.num_classes,
                 average='macro',
-            )(preds, labels),
+            )(preds, labels).compute(),
             batch_size=batch_size,
         )
 
-        return loss
+    # def configure_optimizers(self):
+    #     optimizer = get_optimizer(self.parameters(), self.optimizer_name,
+    #                               **self.optimizer_kwargs)
+    #     # scheduler = get_scheduler(optimizer, self.scheduler_name,
+    #     #                           **self.scheduler_kwargs)
 
+    #     scheduler = {
+    #         "scheduler":
+    #         torch.optim.lr_scheduler.ReduceLROnPlateau(
+    #             optimizer,
+    #             mode="min",
+    #             patience=5,
+    #             factor=0.5,
+    #         ),
+    #         "monitor":
+    #         "val_loss",
+    #         "frequency":
+    #         1
+    #     }
+    #     if isinstance(scheduler, dict):
+    #         return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+    #     return [optimizer], [scheduler]
     def configure_optimizers(self):
-        optimizer = get_optimizer(self.parameters(), self.optimizer_name,
-                                  **self.optimizer_kwargs)
-        scheduler = get_scheduler(optimizer, self.scheduler_name,
-                                  **self.scheduler_kwargs)
-
-        if isinstance(scheduler, dict):
-            return {"optimizer": optimizer, "lr_scheduler": scheduler}
-
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=1e-3,
+            weight_decay=1e-4,
+        )
+        lr_scheduler = ReduceLROnPlateau(optimizer, "min")
+        scheduler = {
+            "scheduler": lr_scheduler,
+            "reduce_on_plateau": True,
+            "monitor": "val_loss",
+            "interval": "epoch",
+            "frequency": 10,
+            "patience": 5,
+            "mode": "min",
+            "factor": 0.1,
+            "verbose": True,
+            "min_lr": 1e-8,
+            'strict': False,
+        }
         return [optimizer], [scheduler]
 
 
