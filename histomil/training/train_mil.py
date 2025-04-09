@@ -97,13 +97,13 @@ def train_aggregator(
     )
     trainer.logger.log_hyperparams(
         {
-            "hdf5_path": hdf5_path,
-            "output_name": output_name,
-            "gpu_id": gpu_id,
-            "batch_size": batch_size,
-            "num_epochs": num_epochs,
-            "num_workers": num_workers,
-            "log_every_n": log_every_n,
+            "run/hdf5_path": hdf5_path,
+            "run/output_name": output_name,
+            "run/gpu_id": gpu_id,
+            "run/batch_size": batch_size,
+            "run/num_epochs": num_epochs,
+            "run/num_workers": num_workers,
+            "run/log_every_n": log_every_n,
         }
     )
 

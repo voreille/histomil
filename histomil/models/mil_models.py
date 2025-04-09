@@ -212,15 +212,21 @@ class AttentionAggregatorPL(pl.LightningModule):
         self.log("test_acc", accuracy, batch_size=batch_size, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = get_optimizer(self.parameters(), self.optimizer_name,
-                                  **self.optimizer_kwargs)
-        scheduler = get_scheduler(optimizer, self.scheduler_name,
-                                  **self.scheduler_kwargs)
+        optimizer = get_optimizer(
+            self.parameters(), self.optimizer_name, **self.optimizer_kwargs
+        )
+        if self.scheduler_name is None:
+            return optimizer
+
+        scheduler = get_scheduler(
+            optimizer, self.scheduler_name, **self.scheduler_kwargs
+        )
 
         if isinstance(scheduler, dict):
             return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
         return [optimizer], [scheduler]
+
 
 class GatedAttention(nn.Module):
     def __init__(

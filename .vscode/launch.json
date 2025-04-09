@@ -104,7 +104,7 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "--hdf5-path",
-                "/home/valentin/workspaces/histomil/data/processed/embeddings/superpixel_org.h5",
+                "/home/valentin/workspaces/histomil/data/processed/embeddings/UNI2_embeddings.h5",
                 "--gpu-id",
                 "0",
                 "--num-workers",
