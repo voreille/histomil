@@ -4,11 +4,15 @@ from torch import nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from histomil.training.utils import get_optimizer, get_scheduler, get_loss_function, get_metric
+from histomil.training.utils import (
+    get_optimizer,
+    get_scheduler,
+    get_loss_function,
+    get_metric,
+)
 
 
 class AttentionAggregatorPL(pl.LightningModule):
-
     def __init__(
         self,
         input_dim,
@@ -53,8 +57,7 @@ class AttentionAggregatorPL(pl.LightningModule):
 
         self.classifier = nn.Sequential(
             nn.Dropout(p=dropout),
-            nn.Linear(self.hidden_dim * self.attention_branches,
-                      self.num_classes),
+            nn.Linear(self.hidden_dim * self.attention_branches, self.num_classes),
         )
 
         self.optimizer_name = optimizer
@@ -71,12 +74,17 @@ class AttentionAggregatorPL(pl.LightningModule):
         self.train_accuracy = get_metric(
             task=self.task,
             num_classes=num_classes,
-            average='macro',
+            average="macro",
         )
         self.val_accuracy = get_metric(
             task=self.task,
             num_classes=num_classes,
-            average='macro',
+            average="macro",
+        )
+        self.test_accuracy = get_metric(
+            task=self.task,
+            num_classes=num_classes,
+            average="macro",
         )
         self.save_hyperparameters()
 
@@ -88,26 +96,33 @@ class AttentionAggregatorPL(pl.LightningModule):
 
         # Compute Gated Attention Scores
         attention_tanh = self.attention_tanh(x)  # (num_patches, attention_dim)
-        attention_sigmoid = self.attention_sigmoid(
-            x)  # (num_patches, attention_dim)
+        attention_sigmoid = self.attention_sigmoid(x)  # (num_patches, attention_dim)
         attention_scores = self.attention_weights(
-            attention_tanh *
-            attention_sigmoid)  # (num_patches, attention_heads)
+            attention_tanh * attention_sigmoid
+        )  # (num_patches, attention_heads)
 
         # Normalize attention scores
-        attention_scores = torch.transpose(attention_scores, 1,
-                                           0)  # (attention_heads, num_patches)
-        attention_scores = F.softmax(attention_scores,
-                                     dim=1)  # Normalize over patches
+        attention_scores = torch.transpose(
+            attention_scores, 1, 0
+        )  # (attention_heads, num_patches)
+        attention_scores = F.softmax(attention_scores, dim=1)  # Normalize over patches
 
         # Aggregate patch embeddings using attention
-        aggregated_features = torch.mm(attention_scores,
-                                       x)  # (attention_heads, hidden_dim)
+        aggregated_features = torch.mm(
+            attention_scores, x
+        )  # (attention_heads, hidden_dim)
 
         # Classification
         prediction = self.classifier(aggregated_features)  # (num_classe,)
 
         return prediction.squeeze(), attention_scores
+
+    def predict_one_embedding(self, embedding):
+        with torch.inference_mode():
+            logit, attention_scores = self(embedding)
+        pred = logit.argmax(dim=-1)
+        probs = torch.sigmoid(logit)
+        return pred, probs, attention_scores
 
     def predict_step(self, batch, batch_idx):
         wsi_ids, embeddings, labels = batch
@@ -143,8 +158,7 @@ class AttentionAggregatorPL(pl.LightningModule):
         batch_outputs = torch.stack(batch_outputs)
 
         if self.loss_fn.__class__.__name__ == "BCEWithLogitsLoss":
-            labels_one_hot = F.one_hot(labels,
-                                       num_classes=self.num_classes).float()
+            labels_one_hot = F.one_hot(labels, num_classes=self.num_classes).float()
             loss = self.loss_fn(batch_outputs, labels_one_hot)
         else:
             loss = self.loss_fn(batch_outputs, labels)
@@ -158,18 +172,22 @@ class AttentionAggregatorPL(pl.LightningModule):
         self.train_accuracy(preds, labels)
 
         # Log metrics
-        self.log("train_loss",
-                 loss,
-                 on_step=True,
-                 on_epoch=True,
-                 batch_size=batch_size,
-                 prog_bar=True)
-        self.log("train_acc",
-                 self.train_accuracy.compute(),
-                 on_step=True,
-                 on_epoch=True,
-                 batch_size=batch_size,
-                 prog_bar=True)
+        self.log(
+            "train_loss",
+            loss,
+            on_step=True,
+            on_epoch=True,
+            batch_size=batch_size,
+            prog_bar=True,
+        )
+        self.log(
+            "train_acc",
+            self.train_accuracy.compute(),
+            on_step=True,
+            on_epoch=True,
+            batch_size=batch_size,
+            prog_bar=True,
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -178,84 +196,36 @@ class AttentionAggregatorPL(pl.LightningModule):
         accuracy = self.val_accuracy.compute()
 
         # Log metrics
-        self.log("val_loss",
-                 val_loss,
-                 on_epoch=True,
-                 batch_size=batch_size,
-                 prog_bar=True)
-        self.log("val_acc",
-                 accuracy,
-                 on_epoch=True,
-                 batch_size=batch_size,
-                 prog_bar=True)
+        self.log(
+            "val_loss", val_loss, on_epoch=True, batch_size=batch_size, prog_bar=True
+        )
+        self.log(
+            "val_acc", accuracy, on_epoch=True, batch_size=batch_size, prog_bar=True
+        )
 
     def test_step(self, batch, batch_idx):
         loss, preds, labels, batch_size = self.step(batch)
+        self.test_accuracy(preds, labels)
+        accuracy = self.test_accuracy.compute()
         # Log test metrics
         self.log("test_loss", loss, batch_size=batch_size)
-        self.log(
-            "test_acc",
-            get_metric(
-                task=self.task,
-                num_classes=self.num_classes,
-                average='macro',
-            )(preds, labels).compute(),
-            batch_size=batch_size,
-        )
+        self.log("test_acc", accuracy, batch_size=batch_size, prog_bar=True)
 
-    # def configure_optimizers(self):
-    #     optimizer = get_optimizer(self.parameters(), self.optimizer_name,
-    #                               **self.optimizer_kwargs)
-    #     # scheduler = get_scheduler(optimizer, self.scheduler_name,
-    #     #                           **self.scheduler_kwargs)
-
-    #     scheduler = {
-    #         "scheduler":
-    #         torch.optim.lr_scheduler.ReduceLROnPlateau(
-    #             optimizer,
-    #             mode="min",
-    #             patience=5,
-    #             factor=0.5,
-    #         ),
-    #         "monitor":
-    #         "val_loss",
-    #         "frequency":
-    #         1
-    #     }
-    #     if isinstance(scheduler, dict):
-    #         return {"optimizer": optimizer, "lr_scheduler": scheduler}
-
-    #     return [optimizer], [scheduler]
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
-            self.parameters(),
-            lr=1e-3,
-            weight_decay=1e-4,
-        )
-        lr_scheduler = ReduceLROnPlateau(optimizer, "min")
-        scheduler = {
-            "scheduler": lr_scheduler,
-            "reduce_on_plateau": True,
-            "monitor": "val_loss",
-            "interval": "epoch",
-            "frequency": 10,
-            "patience": 5,
-            "mode": "min",
-            "factor": 0.1,
-            "verbose": True,
-            "min_lr": 1e-8,
-            'strict': False,
-        }
+        optimizer = get_optimizer(self.parameters(), self.optimizer_name,
+                                  **self.optimizer_kwargs)
+        scheduler = get_scheduler(optimizer, self.scheduler_name,
+                                  **self.scheduler_kwargs)
+
+        if isinstance(scheduler, dict):
+            return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
         return [optimizer], [scheduler]
 
-
 class GatedAttention(nn.Module):
-
-    def __init__(self,
-                 input_dim=2048,
-                 hidden_dim=128,
-                 attention_dim=128,
-                 attention_branches=1):
+    def __init__(
+        self, input_dim=2048, hidden_dim=128, attention_dim=128, attention_branches=1
+    ):
         super(GatedAttention, self).__init__()
 
         self.input_dim = input_dim
@@ -270,19 +240,21 @@ class GatedAttention(nn.Module):
 
         self.attention_tanh = nn.Sequential(
             nn.Linear(self.hidden_dim, self.attention_dim),  # matrix V
-            nn.Tanh())
+            nn.Tanh(),
+        )
 
         self.attention_sigmoid = nn.Sequential(
             nn.Linear(self.hidden_dim, self.attention_dim),  # matrix U
-            nn.Sigmoid())
+            nn.Sigmoid(),
+        )
 
         self.attention_weights = nn.Linear(
             self.attention_dim, self.attention_branches
         )  # matrix w (or vector w if self.ATTENTION_BRANCHES==1)
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.hidden_dim * self.attention_branches, 1),
-            nn.Sigmoid())
+            nn.Linear(self.hidden_dim * self.attention_branches, 1), nn.Sigmoid()
+        )
 
     def forward(self, x):
         """
@@ -292,21 +264,21 @@ class GatedAttention(nn.Module):
 
         # Compute Gated Attention Scores
         attention_tanh = self.attention_tanh(x)  # (num_patches, attention_dim)
-        attention_sigmoid = self.attention_sigmoid(
-            x)  # (num_patches, attention_dim)
+        attention_sigmoid = self.attention_sigmoid(x)  # (num_patches, attention_dim)
         attention_scores = self.attention_weights(
-            attention_tanh *
-            attention_sigmoid)  # (num_patches, attention_heads)
+            attention_tanh * attention_sigmoid
+        )  # (num_patches, attention_heads)
 
         # Normalize attention scores
-        attention_scores = torch.transpose(attention_scores, 1,
-                                           0)  # (attention_heads, num_patches)
-        attention_scores = F.softmax(attention_scores,
-                                     dim=1)  # Normalize over patches
+        attention_scores = torch.transpose(
+            attention_scores, 1, 0
+        )  # (attention_heads, num_patches)
+        attention_scores = F.softmax(attention_scores, dim=1)  # Normalize over patches
 
         # Aggregate patch embeddings using attention
-        aggregated_features = torch.mm(attention_scores,
-                                       x)  # (attention_heads, hidden_dim)
+        aggregated_features = torch.mm(
+            attention_scores, x
+        )  # (attention_heads, hidden_dim)
 
         # Classification
         prediction = self.classifier(aggregated_features)  # (1,)

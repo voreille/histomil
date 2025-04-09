@@ -13,7 +13,6 @@ def collate_fn_ragged(batch):
 
 
 class TileDataset(Dataset):
-
     def __init__(self, tile_paths, preprocess=None):
         """
         Tile-level dataset that returns individual tile images from a list of paths.
@@ -51,17 +50,21 @@ class TileDataset(Dataset):
 class HDF5WSIDataset(Dataset):
     """Dataset to load embeddings from an HDF5 file for MIL training."""
 
+    @staticmethod
+    def get_collate_fn_ragged():
+        def collate_fn_ragged(batch):
+            wsi_ids, embeddings, labels = zip(*batch)
+            return list(wsi_ids), list(embeddings), torch.stack(labels)
+
+        return collate_fn_ragged
+
     def __init__(self, hdf5_path, split="train", label_map=None):
         self.hdf5_path = hdf5_path
         self.split = split
         self.h5_file = h5py.File(hdf5_path, "r")
         self.wsi_ids = list(self.h5_file[self.split].keys())
         self.embedding_dim = self.h5_file.attrs["embedding_dim"]
-        self.label_map = label_map if label_map else {
-            "NORMAL": 0,
-            "LUAD": 1,
-            "LUSC": 2
-        }
+        self.label_map = label_map if label_map else {"NORMAL": 0, "LUAD": 1, "LUSC": 2}
 
     def __len__(self):
         return len(self.wsi_ids)
@@ -70,14 +73,55 @@ class HDF5WSIDataset(Dataset):
         """Returns (wsi_id, embeddings, label)"""
         wsi_id = self.wsi_ids[idx]
         embeddings = torch.tensor(
-            self.h5_file[f"{self.split}/{wsi_id}/embeddings"][:],
-            dtype=torch.float32)
+            self.h5_file[f"{self.split}/{wsi_id}/embeddings"][:], dtype=torch.float32
+        )
         label = torch.tensor(
-            self.label_map[
-                self.h5_file[f"{self.split}/{wsi_id}"].attrs["label"]],
+            self.label_map[self.h5_file[f"{self.split}/{wsi_id}"].attrs["label"]],
             dtype=torch.long,
         )
         return wsi_id, embeddings, label
+
+    def close(self):
+        """Ensure the HDF5 file is properly closed."""
+        self.h5_file.close()
+
+
+class HDF5WSIDatasetWithTileID(Dataset):
+    """Dataset to load embeddings from an HDF5 file for MIL training."""
+
+    @staticmethod
+    def get_collate_fn_ragged():
+        def collate_fn_ragged(batch):
+            wsi_ids, embeddings, labels, tile_ids = zip(*batch)
+            return list(wsi_ids), list(embeddings), torch.stack(labels), list(tile_ids)
+
+        return collate_fn_ragged
+
+    def __init__(self, hdf5_path, split="train", label_map=None):
+        self.hdf5_path = hdf5_path
+        self.split = split
+        self.h5_file = h5py.File(hdf5_path, "r")
+        self.wsi_ids = list(self.h5_file[self.split].keys())
+        self.embedding_dim = self.h5_file.attrs["embedding_dim"]
+        self.label_map = label_map if label_map else {"NORMAL": 0, "LUAD": 1, "LUSC": 2}
+
+    def __len__(self):
+        return len(self.wsi_ids)
+
+    def __getitem__(self, idx):
+        """Returns (wsi_id, embeddings, label)"""
+        wsi_id = self.wsi_ids[idx]
+        embeddings = torch.tensor(
+            self.h5_file[f"{self.split}/{wsi_id}/embeddings"][:], dtype=torch.float32
+        )
+        label = torch.tensor(
+            self.label_map[self.h5_file[f"{self.split}/{wsi_id}"].attrs["label"]],
+            dtype=torch.long,
+        )
+
+        tile_ids = self.h5_file[f"{self.split}/{wsi_id}/tile_ids"][:]
+
+        return wsi_id, embeddings, label, tile_ids
 
     def close(self):
         """Ensure the HDF5 file is properly closed."""

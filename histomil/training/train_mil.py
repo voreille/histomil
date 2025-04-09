@@ -1,47 +1,51 @@
-import os
 from pathlib import Path
 
 import click
-import torch
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from histomil.models.mil_models import AttentionAggregatorPL
-from histomil.training.utils import get_optimizer, get_scheduler, get_loss_function
 from histomil.data.torch_datasets import HDF5WSIDataset, collate_fn_ragged
 
 project_dir = Path(__file__).parents[2].resolve()
 
 
 @click.command()
-@click.option("--hdf5-path",
-              type=str,
-              required=True,
-              help="Path to the HDF5 file containing embeddings.")
-@click.option("--output-name",
-              default="checkpoint_last",
-              help="name for the final checkpoint")
+@click.option(
+    "--hdf5-path",
+    type=str,
+    required=True,
+    help="Path to the HDF5 file containing embeddings.",
+)
+@click.option(
+    "--output-name", default="checkpoint_last", help="name for the final checkpoint"
+)
 @click.option("--batch-size", default=128, help="Batch size for training.")
 @click.option("--num-epochs", default=100, help="Number of training epochs.")
-@click.option("--num-workers",
-              default=8,
-              help="Number of workers for DataLoader.")
+@click.option("--num-workers", default=8, help="Number of workers for DataLoader.")
 @click.option("--lr", default=1e-3, help="Learning rate for the optimizer.")
-@click.option("--optimizer",
-              default="Adam",
-              help="Optimizer to use (adam, sgd, adamw).")
-@click.option("--scheduler",
-              default="ReduceLROnPlateau",
-              help="Learning rate scheduler.")
-@click.option("--hidden-dim",
-              default=128,
-              help="Hidden dimension for the model.")
+@click.option(
+    "--optimizer", default="Adam", help="Optimizer to use (adam, sgd, adamw)."
+)
+@click.option("--scheduler", default=None, help="Learning rate scheduler.")
+@click.option("--hidden-dim", default=128, help="Hidden dimension for the model.")
 @click.option("--dropout", default=0.3, help="Dropout rate for the model.")
 @click.option("--log-every-n", default=10, help="Logging frequency.")
 @click.option("--gpu-id", default=1, help="ID of the GPU to use")
-def train_aggregator(hdf5_path, output_name, batch_size, num_epochs,
-                     num_workers, lr, optimizer, scheduler, hidden_dim,
-                     dropout, log_every_n, gpu_id):
+def train_aggregator(
+    hdf5_path,
+    output_name,
+    batch_size,
+    num_epochs,
+    num_workers,
+    lr,
+    optimizer,
+    scheduler,
+    hidden_dim,
+    dropout,
+    log_every_n,
+    gpu_id,
+):
     """Train the Attention MIL Aggregator Model using PyTorch Lightning."""
 
     # Load dataset
@@ -72,12 +76,9 @@ def train_aggregator(hdf5_path, output_name, batch_size, num_epochs,
         dropout=dropout,
         # loss="CrossEntropyLoss",
         optimizer=optimizer,
-        optimizer_kwargs={
-            "lr": lr,
-            "weight_decay": 1e-4
-        },
-        # scheduler=scheduler,
-        # # scheduler_kwargs={"T_max": num_epochs},  # For cosine scheduler
+        optimizer_kwargs={"lr": lr, "weight_decay": 1e-4},
+        scheduler=scheduler,
+        # scheduler_kwargs={"T_max": num_epochs},  # For cosine scheduler
         # scheduler_kwargs={
         #     "mode": 'min',
         #     "patience": 5,
@@ -94,6 +95,18 @@ def train_aggregator(hdf5_path, output_name, batch_size, num_epochs,
         precision="16-mixed",
         check_val_every_n_epoch=10,
     )
+    trainer.logger.log_hyperparams(
+        {
+            "hdf5_path": hdf5_path,
+            "output_name": output_name,
+            "gpu_id": gpu_id,
+            "batch_size": batch_size,
+            "num_epochs": num_epochs,
+            "num_workers": num_workers,
+            "log_every_n": log_every_n,
+        }
+    )
+
     trainer.validate(model, val_loader)
 
     # Train model
