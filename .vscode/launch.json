@@ -73,7 +73,6 @@
                 "data/interim/embeddings/UNI2_embeddings/",
             ]
         },
- 
         {
             "name": "Python: Debug compute_embeddings_simpler CLI",
             "type": "debugpy",
@@ -93,7 +92,6 @@
                 "5000",
             ]
         },
-
         {
             "name": "Python: Debug MIL training",
             "type": "debugpy",
@@ -104,7 +102,9 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "--hdf5-path",
-                "/home/valentin/workspaces/histomil/data/processed/embeddings/UNI2_embeddings.h5",
+                "/home/valentin/workspaces/histomil/data/processed/embeddings/superpixels_moco_org.h5",
+                "--output-name",
+                "debug_moco_org",
                 "--gpu-id",
                 "0",
                 "--num-workers",
@@ -113,7 +113,25 @@
                 "128",
             ]
         },
- 
+        {
+            "name": "Python: Debug MIL training with CLAM",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/histomil/training/train_mil_clam.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/.env",
+            "args": [
+                "--hdf5-path",
+                "/home/valentin/workspaces/histomil/data/processed/embeddings/superpixels_moco_org.h5",
+                "--output-name",
+                "debug_moco_org_clam",
+                "--gpu-id",
+                "0",
+                "--num-workers",
+                "4",
+            ]
+        },
         {
             "name": "Python Debugger: Current File",
             "type": "debugpy",

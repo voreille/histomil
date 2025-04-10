@@ -3,6 +3,7 @@
 /models/
 lightning_logs/
 /lightning_logs_old/
+/tb_logs/
 
 # Mac OS-specific storage files
 .DS_Store
