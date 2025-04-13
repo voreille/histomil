@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import subprocess
 import torch
 import time
@@ -7,7 +5,7 @@ import time
 # Define list of model weight paths
 
 # model_names = ["UNI2", "bioptimus"]
-model_names = ["bioptimus"]
+model_names = ["UNI2"]
 print(f"computing the embeddings for baselines: {model_names}")
 
 for model_name in model_names:
@@ -17,10 +15,18 @@ for model_name in model_names:
     try:
         process = subprocess.run(
             [
-                "python", "histomil/data/compute_embeddings_to_npz.py",
-                "--model-name", model_name, "--output-dir",
-                f"data/interim/embeddings/{model_name}_embeddings/", "--num-workers",
-                "32", "--gpu-id", "1", "--batch-size", "512"
+                "python",
+                "histomil/data/compute_embeddings.py",
+                "--model-name",
+                model_name,
+                "--output-filepath",
+                f"data/interim/embeddings/{model_name}_embeddings/{model_name}_cptac.h5",
+                "--num-workers",
+                "32",
+                "--gpu-id",
+                "1",
+                "--batch-size",
+                "512",
             ],
             check=True,
         )

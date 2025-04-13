@@ -13,8 +13,10 @@
             "justMyCode": false,
             "envFile": "${workspaceFolder}/.env",
             "args": [
-                "--weights-path",
-                "/home/valentin/workspaces/histomil/models/test/superpixel_moco_org_99.pth",
+                // "--weights-path",
+                // "/home/valentin/workspaces/histomil/models/test/superpixel_moco_org_99.pth",
+                "--model-name",
+                "bioptimus",
                 "--gpu-id",
                 "1",
                 "--num-workers",

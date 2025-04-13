@@ -1,0 +1,9 @@
+compute:
+  num_workers: 32
+  gpu_id: 1
+  batch_size: 512
+models:
+  - UNI2
+  # - bioptimus
+paths:
+  output_dir: "data/interim/embeddings"

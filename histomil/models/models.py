@@ -42,7 +42,8 @@ def load_local_model(checkpoint_path, device):
 
     # Load the model state dict with strict=False to ignore missing keys (like queue_ptr)
     missing_keys, unexpected_keys = model.load_state_dict(
-        checkpoint["model_state_dict"], strict=False)
+        checkpoint["model_state_dict"], strict=False
+    )
 
     if missing_keys:
         print(f"Warning: Missing keys in checkpoint: {missing_keys}")
@@ -55,55 +56,75 @@ def load_local_model(checkpoint_path, device):
     return encoder.to(device).eval()
 
 
-def load_model(model_name, weights_path, device):
+def load_model(model_name, device, weights_path=None, apply_torch_scripting=True):
     """Load the model dynamically based on the model name."""
 
     if model_name == "bioptimus":
+        print("Loading Bioptimus model...")
         login(token=os.getenv("HUGGING_FACE_TOKEN"))
-        model = timm.create_model("hf-hub:bioptimus/H-optimus-0",
-                                  pretrained=True,
-                                  init_values=1e-5,
-                                  dynamic_img_size=False)
-        preprocess = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.707223, 0.578729, 0.703617),
-                                 std=(0.211883, 0.230117, 0.177517)),
-        ])
+        model = timm.create_model(
+            "hf-hub:bioptimus/H-optimus-0",
+            pretrained=True,
+            init_values=1e-5,
+            dynamic_img_size=False,
+        )
+        preprocess = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=(0.707223, 0.578729, 0.703617),
+                    std=(0.211883, 0.230117, 0.177517),
+                ),
+            ]
+        )
         embedding_dim = 1536
 
     elif model_name == "UNI2":
+        print("Loading UNI2 model...")
         timm_kwargs = {
-            'img_size': 224,
-            'patch_size': 14,
-            'depth': 24,
-            'num_heads': 24,
-            'init_values': 1e-5,
-            'embed_dim': 1536,
-            'mlp_ratio': 2.66667 * 2,
-            'num_classes': 0,
-            'no_embed_class': True,
-            'mlp_layer': timm.layers.SwiGLUPacked,
-            'act_layer': torch.nn.SiLU,
-            'reg_tokens': 8,
-            'dynamic_img_size': True
+            "img_size": 224,
+            "patch_size": 14,
+            "depth": 24,
+            "num_heads": 24,
+            "init_values": 1e-5,
+            "embed_dim": 1536,
+            "mlp_ratio": 2.66667 * 2,
+            "num_classes": 0,
+            "no_embed_class": True,
+            "mlp_layer": timm.layers.SwiGLUPacked,
+            "act_layer": torch.nn.SiLU,
+            "reg_tokens": 8,
+            "dynamic_img_size": True,
         }
-        model = timm.create_model("hf-hub:MahmoodLab/UNI2-h",
-                                  pretrained=True,
-                                  **timm_kwargs)
+        model = timm.create_model(
+            "hf-hub:MahmoodLab/UNI2-h", pretrained=True, **timm_kwargs
+        )
         preprocess = create_transform(
-            **resolve_data_config(model.pretrained_cfg, model=model))
+            **resolve_data_config(model.pretrained_cfg, model=model)
+        )
         embedding_dim = 1536
-    else:
+    elif weights_path:
+        print("Loading custom model from local weights...")
         # Load your custom model from local weights
-        model = load_local_model(weights_path,
-                                 device)  # Your existing function
-        preprocess = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
-        ])
+        model = load_local_model(weights_path, device)  # Your existing function
+        preprocess = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
         embedding_dim = 2048
 
     model.to(device)
     model.eval()
+
+    if apply_torch_scripting:
+        # Apply torch tracing if specified
+        print("Applying torch scripting...")
+        scripted_model = torch.jit.script(model)
+        scripted_model.to(device)
+        return scripted_model, preprocess, embedding_dim
+
     return model, preprocess, embedding_dim
