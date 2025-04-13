@@ -1,8 +1,6 @@
 defaults:
   - _self_
-  - embeddings: compute
-  - embeddings: models
-  - embeddings: paths
+  - embeddings
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 

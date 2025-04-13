@@ -2,6 +2,7 @@ compute:
   num_workers: 32
   gpu_id: 1
   batch_size: 512
+  magnification: 20
 models:
   - UNI2
   # - bioptimus

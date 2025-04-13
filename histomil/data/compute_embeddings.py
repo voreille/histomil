@@ -190,50 +190,16 @@ def compute_embeddings(
     return embeddings, processed_tile_paths
 
 
-@click.command()
-@click.option(
-    "--model-name",
-    type=str,
-    default="local",
-    help="Model type: 'local' for your model, 'bioptimus' for H-optimus-0",
-)
-@click.option(
-    "--weights-path",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to the local model weights (ignored for bioptimus)",
-)
-@click.option(
-    "--output-filepath",
-    default="data/processed/embeddings/embedding.h5",
-    help="Output directory for embeddings",
-)
-@click.option("--gpu-id", default=0, help="GPU ID to use for inference")
-@click.option("--batch-size", default=256, help="Batch size for inference")
-@click.option(
-    "--num-workers",
-    default=None,
-    type=click.INT,
-    help="Number of workers for DataLoader",
-)
-@click.option(
-    "--max-batches",
-    default=None,
-    type=int,
-    help="Limit number of batches for debugging",
-)
-@click.option("--save-every", default=0, help="Save checkpoint every n batches")
-@click.option("--magnification", default=10, help="Magnification of the tiles")
-def main(
+def compute_and_store_embeddings(
     model_name,
-    weights_path,
     output_filepath,
-    gpu_id,
-    batch_size,
-    num_workers,
-    max_batches,
-    save_every,
-    magnification,
+    weights_path=None,
+    gpu_id=0,
+    batch_size=32,
+    num_workers=0,
+    max_batches=None,
+    save_every=0,
+    magnification=10,
 ):
     """Precompute and store WSI embeddings in a single HDF5 file."""
     autocast_dtype_dict = {
@@ -348,6 +314,64 @@ def main(
                 total_tiles += ds.shape[0]
     print(f"Total number of tiles (computed): {total_tiles}")
     print(f"Total number of tiles (stored as metadata): {total_number_tiles_stored}")
+
+
+@click.command()
+@click.option(
+    "--model-name",
+    type=str,
+    default="local",
+    help="Model type: 'local' for your model, 'bioptimus' for H-optimus-0",
+)
+@click.option(
+    "--weights-path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to the local model weights (ignored for bioptimus)",
+)
+@click.option(
+    "--output-filepath",
+    default="data/processed/embeddings/embedding.h5",
+    help="Output directory for embeddings",
+)
+@click.option("--gpu-id", default=0, help="GPU ID to use for inference")
+@click.option("--batch-size", default=256, help="Batch size for inference")
+@click.option(
+    "--num-workers",
+    default=None,
+    type=click.INT,
+    help="Number of workers for DataLoader",
+)
+@click.option(
+    "--max-batches",
+    default=None,
+    type=int,
+    help="Limit number of batches for debugging",
+)
+@click.option("--save-every", default=0, help="Save checkpoint every n batches")
+@click.option("--magnification", default=10, help="Magnification of the tiles")
+def main(
+    model_name,
+    weights_path,
+    output_filepath,
+    gpu_id,
+    batch_size,
+    num_workers,
+    max_batches,
+    save_every,
+    magnification,
+):
+    compute_and_store_embeddings(
+        model_name,
+        weights_path,
+        output_filepath,
+        gpu_id,
+        batch_size,
+        num_workers,
+        max_batches,
+        save_every,
+        magnification,
+    )
 
 
 if __name__ == "__main__":

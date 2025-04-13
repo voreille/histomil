@@ -1,0 +1,5 @@
+- models=[UNI2]
+- compute.batch_size=512
+- compute.num_workers=32
+- compute.gpu_id=0
+- paths.output_dir=data/interim/embeddings

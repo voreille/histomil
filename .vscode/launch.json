@@ -135,6 +135,25 @@
             ]
         },
         {
+            "name": "Run Compute Embeddings with Hydra",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "histomil.scripts.run_compute_embeddings",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "models=[UNI2]",
+                "compute.batch_size=512",
+                "compute.num_workers=32",
+                "compute.gpu_id=0",
+                "paths.output_dir=data/interim/embeddings"
+            ]
+        },
+        {
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
